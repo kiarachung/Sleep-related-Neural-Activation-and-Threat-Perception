@@ -1,0 +1,701 @@
+---
+title: "PALS0043 Course Work, Candidate WKVF1"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment="")
+library(dplyr)
+library(tidyverse)
+library(lattice)
+library(lme4)
+library(lmerTest)
+library(psych)
+library(MuMIn)
+library(sjPlot)
+library(faux)
+library(ez)
+library(ggplot2)
+library(tidyr)
+library(kableExtra)
+library(rempsyc)
+library(patchwork)
+library(broom.mixed)
+```
+
+I am happy for my course work to be used in future years as an example: Yes
+
+## 1. Journal article
+
+The paper that I will base my experiment on is: 
+
+Tashjian, S. M., & Galván, A. (2019). Neural recruitment related to threat perception differs as a function of adolescent sleep. *Developmental Science*, *23*(5), Article 12933. https://doi.org/10.1111/desc.12933
+
+I confirm this is a peer reviewed article about a psychology topic.
+
+I confirm I have attached an annotated pdf to this submission.
+
+## 2. Background information
+
+Threat perceptions play a crucial role in guiding social interactions and can be formed rapidly from a single glance at someone’s face (Bar et al., 2006). When sleep is insufficient, adults show reduced sensitivity to social cues that convey important information about others (Goldstein-Piekarski et al., 2015), diminished attention to stimuli (Lim & Dinges, 2008), and impaired emotion recognition (Killgore et al., 2017) — all key components of accurate threat appraisal. Accurately distinguishing threatening from non-threatening facial signals is essential, as failures in this process can lead to social dysfunction and increased survival risks due to suboptimal decisions and subsequent actions (Adolphs et al., 1998). Given that adolescents experience more sleep loss than any other developmental stage - with approximately 18–25% exhibiting insomnia symptoms or disrupted sleep (Ohayon et al., 2000) — they may be especially susceptible to the adverse effects of sleep deprivation on threat detection. 
+
+Problematic and insufficient sleep has been associated with altered neural functioning in adolescents (Beebe et al., 2009). However, the mechanisms through which sleep influences the neural systems supporting social cognition remain underexplored. Research examining the relationship between sleep and threat perception in the developing brain suggests that sleep disruption impairs emotion discrimination (Soffer-Dudek et al., 2011), and that adolescents judge their most threatening worry as significantly more severe when sleep deprived compared with when rested (Talbot et al., 2010). However, this research did not require adolescents to make decisions about whether social stimuli were threatening, leaving an important gap in understanding how sleep loss shapes threat judgement in socially-relevant contexts.
+
+Tashjian and Galván (2019) addressed this gap by examining how individual differences in sleep duration and quality relate to neural functioning during an fMRI-based threat perception task in adolescents. Using naturalistic sleep measures collected via actigraphy over a two-week period, they employed a whole-brain approach to identify sleep-sensitive neural systems and then linked these neural patterns to behavioural threat judgement. In their task, participants viewed facial expressions conveying varying degrees of threat — therefore directly examining social threat perception rather than introspective worry — before making threat decisions. They hypothesised that sleep duration and sleep quality — defined as sleep efficiency and the number and duration of nocturnal awakenings — would differentially predict neural responses during the discrimination task, and that adolescents who slept longer and experienced fewer disruptions would demonstrate sharper discrimination of threat potential in faces.
+
+Their analysis employed two primary type of mixed effects models, both incorporating random intercepts. I will be focusing on their threat decision mixed effects logistic regression which was used to assess the probability of a subject making a "threatening" decision versus a "not threatening" decision. This model defined the probability of threat as a function of neural activation extracted from significant fMRI clusters related to sleep duration or quality. Random intercepts were included to account for baseline differences in threat-decision tendencies across adolescents. The logistic regression revealed a significant association between sleep duration-related neural activation and threat decision. Importantly, duration-related activation remained a significant predictor even after controlling for objective face valence. The present coursework will simulate this data and the GLMM analysis of duration-related activation on threat decisions while controlling for face valence, and conduct power and sensitivity analyses to assess the influence of sample size and effect size. These parameters are varied because they directly determine the model's ability to reliably detect the neural activation effect, with larger samples and stronger effects typically yielding higher statistical power. 
+
+## 3. Research Question / Hypotheses
+
+**The question I have chosen to simulate is**: Is neural activation related to sleep duration associated with an increased probability of judging a face as threatening, even after controlling for the objective threat level (valence) of the face? 
+
+**Hypotheses relating to this question are**: Brain activation linked to longer sleep duration is independently associated with a higher tendency to see threat.
+
+## 4. Variables
+```{r}
+data <- read.csv("Decision and Neural Data.csv")
+```
+```{r}
+# Changing the names of the variables and selecting the relevant ones for easier interpretation
+
+data <- data %>% 
+  rename( 
+    Valence = face_valence,
+    Threat_Decision = decision.0.not.threatening.,
+    Neural_Activation = neural_activation_sleep_duration,
+    Subject = ID
+  ) %>% 
+  select(
+    Subject,
+    Valence,
+    Threat_Decision,
+    Neural_Activation
+    )
+
+# Checking for NA values
+cat(any(is.na(data))) 
+```
+### The Dependent Variable
+
+**Name**: Threat decision
+
+**Type**: Binary
+
+*Note.* Threat decision was a forced choice outcome variable. It was defined by the button press the adolescent made during the fMRI task. 
+
+**Values it can take**: 0 = not threatening, 1 = threatening
+
+**Descriptive statistics**: On average, participants rated more faces as not threatening (*M* = 63.38%, *SD* = 19.04%) than threatening (*M* = 36.62%, *SD* = 19.04%). This can be found highlighted under section "3.2.1 Threat decisions" in the original paper. 
+
+### The Independent Variable (1)
+
+**Name**: Face valence
+
+**Type**: Ordinal
+
+*Note.* The faces used in the threat perception task were computer-generated faces selected from a published database (Oosterhof & Todorov, 2008). A set of 70 faces was used, created from 10 identities. Each identity was morphed using a threat computer model to produce seven versions that ranged in valence from not threatening to increasingly threatening.
+
+Face valence will be treated as a control variable. This is to ensure that a significant effect of duration-related neural activation on threat decisions is independent of objective characteristics of the stimuli (the inherent threat coded into the face). 
+
+**Values it can take**: Face valence ranged from 1 to 7. 
+
+**Descriptive statistics**: Counts/proportions by group were not provided for this variable.
+
+### The Independent Variable (2)
+
+**Name**: Neural activation related to sleep duration
+
+**Type**: Continuous
+
+*Note.* This measure was obtained in two distinct steps. First, a whole-brain fMRI analysis to find brain regions where the magnitude of the BOLD signal (neural recruitment) covaried with the adolescents' sleep duration. The most relevant region identified was the left occipital cortex, including the occipital fusiform gyrus (see Table 1 of the original paper) which is part of the core neural network responsible for computing visuoperceptual aspects of human faces. Next, the average magnitude of the fMRI signal (the average contrast parameter estimates) from the specifically defined cluster in the occipital cortex/occipital fusiform gyrus was extracted for each participant, providing a continuous extracted measure of neural activation. 
+
+**Values it can take**: While the exact range is not stated, parameter estimates in fMRI studies generally take continuous values around zero, where positive values indicate increased neural recruitment and negative values indicate a decrease in neural recruitment. 
+
+**Descriptive statistics**: Mean = 41.05, Standard Deviation = 39.61 - based on analysis of the original dataset.
+
+### Random effects
+
+**Structure**: The data consisted of repeated measures (trials) nested within individuals, thus a random intercept for participants was included in analysis. This accounts for individual baseline differences in the log odds of making a threat decision.
+
+**Descriptive statistics**: The model will include the random intercept for participants (Variance = 0.912, *SD* = 0.955). This can be found in Table 2 of the original paper.
+
+## 5. Study Design
+
+**Study design**: Tashjian and Galván (2019) conducted an observational study employing a mixed design to examine how individual differences in adolescents' sleep relate to neural functioning during a threat perception task.
+
+The dependent variable was threat decision, defined as a dichotomous forced-choice response (0 = not threatening, 1 = threatening). Neural activation related to sleep duration served as the between-subjects independent variable; this measure represented each participant's extracted average contrast parameter estimate, indexing individual differences in brain recruitment as a function of typical sleep duration. Face valence was the within-subjects independent variable, reflecting the objective threat level of each face stimulus (coded 1 to 7) and varying on a trial-by-trial basis across 70 faces viewed by each participant. This was included as a control variable to ensure that any observed effect of duration-related neural activation on threat decisions was independent of the stimuli’s objective characteristics.
+
+The final sample comprised 46 adolescents (aged 14-18 years; 26 female), yielding a total of 3010 trial-level observations. The influence of face valence and sleep duration-related neural activation on threat decisions was evaluated using a mixed-effects logistic regression model, with participant included as a random effect to account for the nested structure of the data.
+
+The final analysis reported 3010 observations out of a possible 3220. However, the authors did not specify which individual trials were omitted for the 46 participants, nor did they provide reasons for these missing data points. For the purposes of my simulation, I will assume that each participant completed all trials, as the pattern and source of missingness cannot be accurately reconstructed from the available information. 
+
+**Model formula**: glmer(Threat_Decision ~ Valence + Neural_Activation + (1 | Subject), family = binomial)
+
+## 5. Original Model Outputs
+
+```{r, warning=FALSE}
+# Running the original model to obtain fixed effect estimates and random effect of participant
+
+original_model <- glmer(Threat_Decision ~
+                          Valence +
+                          Neural_Activation +
+                          (1 | Subject),
+                        family = 'binomial',
+                        data = data)
+
+tab_model(
+  original_model,
+  show.icc = TRUE,
+  show.re.var = TRUE,
+  show.se = TRUE,
+  show.stat = TRUE,     
+  show.p = TRUE,
+  transform = NULL,
+  CSS = list( # increasing table width for readability
+    css.table = "width: 90%; font-size: 90%;"
+  ),
+  digits = 3,   
+  dv.labels = "Threat Decisions",
+  pred.labels = c("(Intercept)", "Valence", "Neural Activation"),
+  title = "Table 1. Original Mixed-Effects Logistic Regression Results"
+)
+```
+
+## 6. Simulation code for 1 dataset
+
+```{r}
+# Setting seed for reproducibility
+set.seed(090805)
+
+# Simulation parameters
+trials_per_subject <- 70
+n_subjects <- 46
+
+mean_neural <- mean(data$Neural_Activation)
+sd_neural   <- sd(data$Neural_Activation)
+
+# Fixed Effect Coefficients
+b0 <- -2.716 # Intercept
+b_valence <- 0.403 # Log-odds change per unit valence
+b_neural <- 0.009 # between-subjects effect of neural activation
+
+# Random Effect Coefficient
+sd_subject_intercept <- 0.955
+
+# Subject-level data
+subject_data <- tibble(Subject = 1:n_subjects,
+                       u0p = rnorm(n = n_subjects, # simulate participant intercepts
+                                   mean = 0,
+                                   sd = sd_subject_intercept),
+                       Neural_Activation = rnorm(n = n_subjects, # simulate neural activation var
+                                                 mean = mean_neural,
+                                                 sd = sd_neural))
+
+simdata <- subject_data %>% 
+  slice(rep(1:n(), each = trials_per_subject)) %>% # making 70 rows for each subject (one row per trial)
+  group_by(Subject) %>%
+  mutate(Trial = row_number(),
+         # balanced valence: 10 repeats of each rating 1:7, randomly shuffled as was done in the original 
+         Valence = sample(rep(1:7, each = 10), size = trials_per_subject, replace = FALSE)) %>%
+  ungroup()
+
+simdata <- simdata %>% 
+  mutate(b0 = b0,
+         b_valence = b_valence,
+         b_neural = b_neural,
+         logodds = (b0 + u0p +
+                      b_valence * Valence +
+                      b_neural * Neural_Activation),
+         probability = logistic(logodds),
+         Threat_Decision = rbinom(n = nrow(simdata),
+                                  size = 1,
+                                  prob = probability))
+```
+
+## 7. Code to check simulation has worked
+
+### Descriptives
+```{r}
+# Dependent variable - Threat decision
+
+# original data
+Threat_Decisions <- data %>% 
+  group_by(Subject) %>% 
+  summarise(
+    threat_prop = mean(Threat_Decision),
+    not_threat_prop = 1 - mean(Threat_Decision)
+    ) %>% 
+  summarise(
+    mean_threat = mean(threat_prop) * 100,
+    sd_threat = sd(threat_prop) * 100,
+    mean_not_threat = (1 - mean(threat_prop)) * 100,
+    sd_not_threat = sd(1 - threat_prop) * 100
+  )
+
+# simulated data
+Threat_Decisions_Sim <- simdata %>% 
+  group_by(Subject) %>% 
+  summarise(
+    threat_prop = mean(Threat_Decision),
+    not_threat_prop = 1 - mean(Threat_Decision)
+    ) %>% 
+  summarise(
+    mean_threat = mean(threat_prop) * 100,
+    sd_threat = sd(threat_prop) * 100,
+    mean_not_threat = (1 - mean(threat_prop)) * 100,
+    sd_not_threat = sd(1 - threat_prop) * 100
+  )
+
+Threat_Decisions$table <- "Original"
+Threat_Decisions_Sim$table <- "Simulated"
+
+Threat_Compare <- bind_rows(
+  Threat_Decisions,
+  Threat_Decisions_Sim
+) %>% 
+  select(table, everything())
+
+Threat_Compare <- Threat_Compare %>% 
+  rename(
+    `Mean Threat (%)` = mean_threat,
+    `SD Threat (%)` = sd_threat,
+    `Mean Non-Threat (%)` = mean_not_threat,
+    `SD Non-Threat (%)` = sd_not_threat,
+    `Dataset` = table
+  )
+
+# APA-style table comparing threat decision proportions
+nice_table(
+  Threat_Compare,
+  title = c("Table 2.", "Comparison of Threat Decision Proportions Between Original and Simulated Data")
+)
+
+# Independent variable - Neural activation related to sleep duration
+
+Neural_Activation <- data %>% 
+  summarise(
+    mean_activation = mean(Neural_Activation),
+            sd_activation = sd(Neural_Activation),
+            min_activation = min(Neural_Activation),
+            max_activation = max(Neural_Activation)
+    )
+
+Neural_Activation_Sim <- simdata %>% 
+  summarise(
+    mean_activation = mean(Neural_Activation),
+            sd_activation = sd(Neural_Activation),
+            min_activation = min(Neural_Activation),
+            max_activation = max(Neural_Activation)
+    )
+
+Neural_Activation$table <- "Original"
+Neural_Activation_Sim$table <- "Simulated"
+
+Neural_Compare <- bind_rows(Neural_Activation, Neural_Activation_Sim) %>% 
+  select(table, mean_activation, sd_activation, min_activation, max_activation) %>%
+  mutate(across(c(mean_activation, sd_activation, min_activation, max_activation), ~ round(.x, 2)))
+
+Neural_Compare <- Neural_Compare %>% 
+  rename(
+    `Mean Activation` = mean_activation,
+    `SD Activation` = sd_activation,
+    `Maximum Activation` = max_activation,
+    `Minimum Activation` = min_activation,
+    `Dataset` = table
+  )
+
+nice_table(
+  Neural_Compare,
+  title = c("Table 3.", "Comparison of Neural Activation Descriptive Statistics Between Original and Simulated Data")
+)
+```
+
+### Model outputs
+```{r}
+sim_model <- glmer(Threat_Decision ~
+                          Valence +
+                          Neural_Activation +
+                          (1 | Subject),
+                        family = 'binomial',
+                        data = simdata)
+
+tab_model(original_model, 
+          sim_model,
+          title = "Table 4. Comparing Original and Simulated Model Outputs",
+          dv.labels = c('Original Model', 
+                        'Simulated Model'))
+```
+
+
+**Comments:** The simulated model closely replicated the pattern of results reported in the original analysis. In both models, Valence significantly predicted threat decisions, with highly similar effect sizes. The original model estimated an odds ratio of 1.50 (95% CI [1.43, 1.57], *p* < .001), while the simulation produced an odds ratio of 1.51 (95% CI [1.44, 1.58], *p* < .001). This high degree of correspondence indicates that the behavioural effect of valence was reliably captured in the simulated dataset.
+
+Neural Activation also showed a small but statistically significant effect in both analyses. The original model estimated an odds ratio of 1.01 (95% CI [1.00, 1.02], *p* = .014), and the simulation returned the same odds ratio of 1.01 (95% CI [1.00, 1.02], *p* = .038). Although the simulated p-value was slightly higher, the effect size and confidence intervals were nearly identical, suggesting that the simulation preserved the subtle neural–behaviour association reported in the original study.
+
+The random-effects structure was also reproduced with considerable fidelity. Subject-level variance was comparable across models (τ₀₀ = 0.91 in the original and 0.85 in the simulation), as was the residual variance (σ² = 3.29 in both models). The ICC remained stable as well (0.22 vs. 0.20), indicating that the proportion of variance attributable to between-subject differences was effectively replicated.
+
+Model fit statistics further supported the similarity between the two analyses. The marginal R² values were nearly identical (0.158 for the original and 0.156 for the simulation), as were the conditional R² values (0.340 and 0.329, respectively), indicating that both the fixed and random effects explained comparable proportions of variance in the two datasets.
+
+Overall, the simulation closely approximated the original model’s fixed effects, random effects, and overall model fit, demonstrating strong fidelity to the empirical analysis while highlighting the small fluctuations expected when modelling subtle effects.
+
+### Visualisations
+```{r, fig.width=14, fig.height=7, warning=FALSE}
+# Figure 1 - Original model plot
+
+pred_data <- data.frame(
+  Neural_Activation = seq(min(data$Neural_Activation), 
+                         max(data$Neural_Activation), 
+                         length.out = 100),
+  Valence = mean(data$Valence) # Hold valence constant as control variable
+)
+
+# Get predicted probabilities
+pred_data$pred_prob <- predict(original_model, 
+                               newdata = pred_data, 
+                               type = "response",
+                               re.form = NA)
+
+# Create the plot
+figure_1 <- ggplot() +
+  # Raw data points (jittered to show distribution)
+  geom_jitter(data = data, 
+              aes(x = Neural_Activation, y = Threat_Decision),
+              height = 0.03, alpha = 0.15, size = 1.5, color = "gray40") +
+  # Logistic curve
+  geom_line(data = pred_data, 
+            aes(x = Neural_Activation, y = pred_prob), 
+            color = "black", size = 1.5) +
+  labs(x = "Neural Activation in Occipital Cortex\n(Associated with Sleep Duration)",
+       y = "Probability of Threatening Judgment",
+       title = "Figure 1 · Original Model",
+       subtitle = paste("Average threat judgments:", round(mean(data$Threat_Decision)*100, 1), "%",
+                       "| Based on", nrow(data), "observations")) +
+  scale_y_continuous(labels = scales::percent_format(),
+                     breaks = seq(0, 1, 0.2)) +
+  theme_minimal(base_size = 15) +
+  theme(plot.title = element_text(face = "bold"),
+        plot.subtitle = element_text(color = "gray40")
+        )
+
+
+# Figure 2 - Simulated model plot
+
+pred_data_sim <- data.frame(
+  Neural_Activation = seq(min(simdata$Neural_Activation), 
+                         max(simdata$Neural_Activation), 
+                         length.out = 100),
+  Valence = mean(simdata$Valence) # Hold valence constant as control variable
+)
+
+# Get predicted probabilities
+pred_data_sim$pred_prob <- predict(sim_model, 
+                               newdata = pred_data_sim, 
+                               type = "response",
+                               re.form = NA)
+
+# Create the plot
+figure_2 <- ggplot() +
+  # Raw data points (jittered to show distribution)
+  geom_jitter(data = simdata, 
+              aes(x = Neural_Activation, y = Threat_Decision),
+              height = 0.03, alpha = 0.15, size = 1.5, color = "gray40") +
+  # Logistic curve
+  geom_line(data = pred_data_sim, 
+            aes(x = Neural_Activation, y = pred_prob), 
+            color = "black", size = 1.5) +
+  labs(x = "Neural Activation in Occipital Cortex\n(Associated with Sleep Duration)",
+       y = "Probability of Threatening Judgment",
+       title = "Figure 2 · Simulated Model",
+       subtitle = paste("Average threat judgments:", round(mean(simdata$Threat_Decision)*100, 1), "%",
+                       "| Based on", nrow(simdata), "observations")) +
+  scale_y_continuous(labels = scales::percent_format(),
+                     breaks = seq(0, 1, 0.2)) +
+  theme_minimal(base_size = 15) +
+  theme(plot.title = element_text(face = "bold"),
+        plot.subtitle = element_text(color = "gray40")
+        )
+
+figure_1 + figure_2 + plot_annotation(
+  title = "Comparison of Original vs Simulated Model",
+  theme = theme(plot.title = element_text(size = 25, face = "bold")))
+```
+
+Figure 1: The plot displays the predicted probability of judging faces as threatening across varying levels of neural activation in the occipital cortex (associated with sleep duration) using the original dataset. The solid black line represents the fitted logistic curve from the mixed-effects logistic regression model, showing that higher neural activation predicts increased probability of threat judgments. Grey points represent individual trial-level decisions (jittered for visualisation), with higher point density indicating more frequent responses. Based on analysis of 3010 observations from 46 adolescents, with an overall threat judgment rate of 36.6%.
+
+Figure 2: The plot displays the same, this time using the simulated data. Based on analysis of 3220 observations from 46 adolescents, with an overall threat judgment rate of 35.4%. 
+
+The two plots display broadly similar patterns, with both the original dataset (Figure 1) and the simulated dataset (Figure 2) showing a positive association between neural activation and the probability of making a threatening judgment. In both models, higher neural activation predicts a greater likelihood of judging a face as threatening, consistent with the expected direction of effect from the mixed effects logistic regression.
+
+The shape and steepness of the logistic curves are comparable across the two figures, indicating that the simulated model successfully captures the underlying relation present in the original data. However, there is a notable difference between the two plots in range of neural activation values. In Figure 2, the activation variable spans a lower and more symmetric range, extending further into negative values and not reaching the higher positive values observed in Figure 1. This results in a leftward shift of the logistic curve. This difference reflects the distribution of the simulated predictor rather than a change in the underlying effect: because the simulated neural activation was generated using the empirical mean and standard deviation, the curve is plotted over a numerically different range, even though the model estimates the same positive association between activation and threat judgments.
+
+## 8. Simulation code for power analysis
+
+**Any differences to original experiment**: As previously mentioned, my simulation assumes that all 3220 trials were completed, rather than the 3010 observations reported in the original experiment. The authors did not specify which trials were excluded or provide reasons for the missing data, so the full trial count is used to maintain a consistent and transparent simulation structure. 
+
+**Alpha level**: 0.05
+
+**Effect of interest**: Neural activation related to sleep duration
+
+```{r}
+sim1 <- function() {
+
+# Simulation parameters
+trials_per_subject <- 70
+n_subjects <- 46
+
+mean_neural <- mean(data$Neural_Activation)
+sd_neural   <- sd(data$Neural_Activation)
+
+# Fixed Effect Coefficients
+b0 <- -2.716 # Intercept
+b_valence <- 0.403 # Log-odds change per unit valence
+b_neural <- 0.009 # between-subjects effect of neural activation
+
+# Random Effect Coefficient
+sd_subject_intercept <- 0.955
+
+# Subject-level data
+subject_data <- tibble(Subject = 1:n_subjects,
+                       u0p = rnorm(n = n_subjects, # simulate participant intercepts
+                                   mean = 0,
+                                   sd = sd_subject_intercept),
+                       Neural_Activation = rnorm(n = n_subjects, # simulate neural activation var
+                                                 mean = mean_neural,
+                                                 sd = sd_neural))
+
+simdata <- subject_data %>%
+  slice(rep(1:n(), each = trials_per_subject)) %>% # making 70 rows for each subject (one row per trial)
+  group_by(Subject) %>%
+  mutate(Trial = row_number(),
+         # balanced valence: 10 repeats of each rating 1:7, randomly shuffled as was done in the original
+         Valence = sample(rep(1:7, each = 10), size = trials_per_subject, replace = FALSE)) %>%
+  ungroup()
+
+simdata <- simdata %>%
+  mutate(b0 = b0,
+         b_valence = b_valence,
+         b_neural = b_neural,
+         logodds = (b0 + u0p +
+                      b_valence * Valence +
+                      b_neural * Neural_Activation),
+         probability = logistic(logodds),
+         Threat_Decision = rbinom(n = nrow(simdata),
+                                  size = 1,
+                                  prob = probability))
+
+sim_model <- glmer(Threat_Decision ~
+                          Valence +
+                          Neural_Activation +
+                          (1 | Subject),
+                        family = 'binomial',
+                        data = simdata)
+
+broom.mixed::tidy(sim_model,
+                  effects = 'fixed')
+}
+```
+
+```{r, message=FALSE}
+set.seed(250202)
+sims <- map_df(1:100, ~ sim1())
+
+sims <- sims %>%
+  filter(term == 'Neural_Activation') %>%
+  mutate(sig = if_else(p.value < .05, TRUE, FALSE))
+
+sims %>%
+  pull(sig) %>%
+  mean() %>% 
+  cat()
+```
+
+Using this simulated dataset, the power to detect a significant effect of sleep duration-related neural activation was 63%. This low power may indicate that the influence of sleep duration on threat perception is relatively modest, such that sleep does not fundamentally alter threat judgement but instead has a subtle modulatory effect. 
+
+## 9. Sensitivity analysis
+
+**Description of parameters that were changed for this part**: The sensitivity analysis examines two parameters - sample size and effect size - selected based on key limitations identified in the original study. First, the paper's sample of *N* = 46 adolescents exceeds typical neuroimaging samples, yet may still be underpowered. While the authors noted their adolescent sample size was approximately 2.6 times larger than an adult sample using the same face stimuli (Goldstein-Piekarski et al., 2015), concerns about statistical power in fMRI research have led to recommendations for larger samples, potentially in excess of *N* = 100 to achieve adequate power and replicability (Turner et al., 2018). Thus, I have chosen to vary sample size (30, 46, 80, 120, 200) to quantify how power changes with feasible increments, showing whether the original sample was sufficient and what size would be needed for reliable detection.
+
+Second, the reported effect of neural activation on threat decisions is very small (β = 0.009), corresponding to an odds ratio of 1.009, meaning each unit increase in neural activation increases odds of threat judgment by only 0.9%. This reflects the subtlety common in brain-behaviour relationships involving sleep (Goldstein-Piekarski et al., 2015; Kong et al., 2010). By testing a range of effect sizes (0.009, 0.015, 0.025), I am assessing the robustness of the findings. The smallest value (0.009) represents the reported effect; 0.015 reflects a moderately stronger relationship that might emerge with improved measurement or experimental control; and 0.025 represents an upper-bound effect that is still realistic for brain-behaviour studies (Gujar et al., 2011; Poldrack et al., 2017). This range allows me to assess how power depends on effect magnitude: even if the true effect is at the upper end of this realistic spectrum, the original study may remain underpowered, highlighting the need for larger samples in sleep-related neuroimaging research. 
+
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
+sensitivity_analysis <- function(n, b_neural_effect) {
+# Simulation parameters
+n_subjects <- n
+trials_per_subject <- 70
+
+mean_neural <- mean(data$Neural_Activation)
+sd_neural   <- sd(data$Neural_Activation)
+
+# Fixed Effect Coefficients
+b0 <- -2.716 # Intercept
+b_valence <- 0.403 # Log-odds change per unit valence
+b_neural <- b_neural_effect
+
+# Random Effect Coefficient
+sd_subject_intercept <- 0.955
+
+# Subject-level data
+subject_data <- tibble(Subject = 1:n_subjects,
+                       u0p = rnorm(n = n_subjects, # simulate participant intercepts
+                                   mean = 0,
+                                   sd = sd_subject_intercept),
+                       Neural_Activation = rnorm(n = n_subjects, # simulate neural activation var
+                                                 mean = mean_neural,
+                                                 sd = sd_neural))
+
+simdata <- subject_data %>%
+  slice(rep(1:n(), each = trials_per_subject)) %>% # making 70 rows for each subject (one row per trial)
+  group_by(Subject) %>%
+  mutate(Trial = row_number(),
+         # balanced valence: 10 repeats of each rating 1:7, randomly shuffled as was done in the original
+         Valence = sample(rep(1:7, each = 10), size = trials_per_subject, replace = FALSE)) %>%
+  ungroup()
+
+simdata <- simdata %>%
+  mutate(b0 = b0,
+         b_valence = b_valence,
+         b_neural = b_neural,
+         logodds = (b0 + u0p +
+                      b_valence * Valence +
+                      b_neural * Neural_Activation),
+         probability = logistic(logodds),
+         Threat_Decision = rbinom(n = nrow(simdata),
+                                  size = 1,
+                                  prob = probability))
+
+sim_model <- glmer(Threat_Decision ~
+                          Valence +
+                          Neural_Activation +
+                          (1 | Subject),
+                        family = 'binomial',
+                        data = simdata,
+                        control = glmerControl(optimizer = "bobyqa"))
+
+broom.mixed::tidy(sim_model,
+                  effects = 'fixed')
+}
+
+# Stating how the parameters of the sensitivity analysis should vary
+n_vals <- c(30, 46, 80, 120, 200) # sample sizes
+b_vals <- c(0.009, 0.015, 0.025) # neural activation effect sizes
+
+# Setting seed for reproducibility
+set.seed(290521)
+
+# Generating every combination of the two parameters and running the sensitivity analysis function
+sensitivity_data <- crossing(n = n_vals,
+                 b_neural_effect = b_vals,
+                 sim = 1:100) %>%
+  mutate(result = map2(n, b_neural_effect, sensitivity_analysis))
+
+# Extracting results
+sensitivity_data <- sensitivity_data %>%
+  unnest(result) %>%
+  filter(term == "Neural_Activation") %>%
+  mutate(sig = p.value < 0.05)
+
+# Table with power results
+power_table <- sensitivity_data %>%
+  group_by(n, b_neural_effect) %>%
+  summarise(power = mean(sig) * 100)
+
+# Saving power table to save time
+write.csv(power_table, "power_table.csv")
+```
+*Note*: The sensitivity analysis explored parameter combinations that occasionally led to convergence issues. To address this, GLMMs in the sensitivity analysis were fitted using the bobyqa optimizer. Some simulated datasets continued to generate minor convergence warnings though these were small in magnitude and did not meaningfully affect the parameter estimates, thus were retained in the sensitivity analysis.
+
+**Results of the sensitivity analysis**:
+```{r}
+# APA formatted table demonstrating the results of the sensitivity analysis
+
+power_table <- read.csv("power_table.csv") %>% 
+  select(-1)
+
+# Renaming columns
+power_table_renamed <- power_table
+colnames(power_table_renamed) <- c("Sample Sizes", "Neural Activation Effect Sizes", "Power")
+
+# Producing an APA formatted table for the simulated data
+power_table_formatted <- power_table_renamed %>%
+  mutate(
+    # effect sizes to 3 decimal places
+    `Neural Activation Effect Sizes` = sprintf("%.3f", `Neural Activation Effect Sizes`),
+    # sample sizes as integer strings (no decimals)
+    `Sample Sizes` = sprintf("%d", as.integer(`Sample Sizes`)),
+    # power as integer strings (round to nearest integer first)
+    Power = sprintf("%d", as.integer(round(Power)))
+  )
+nice_table(
+  power_table_formatted,
+  title = c("Table 5.", "Sensitivity Analysis Results")
+)
+
+# Plotting sensitivity analysis results using power curves
+
+power_plot_data <- power_table %>% 
+  mutate(b_neural_effect = as.factor(b_neural_effect)) # treating effect sizes as factors for grouping
+
+ggplot(power_plot_data,
+       aes(x = n, y = power, group = b_neural_effect)) +
+  geom_point() +
+  geom_line() +
+  facet_wrap(~ b_neural_effect, nrow = 1,
+             labeller = labeller(effect = function(x) paste0("Effect Size = ", x))) +
+  scale_x_continuous(breaks = unique(power_plot_data$n)) +
+  scale_y_continuous(breaks = seq(0, 100, by = 10)) +
+  geom_hline(yintercept = 80, linetype = "dotted") +
+  labs(
+    title = "Figure 3. Power Curves for Sensitivity Analysis",
+    x = "Sample Size (n)",
+    y = "Power"
+  ) +
+  theme_bw()
+```
+
+**Comments:** Across all simulated scenarios, statistical power increased as both sample size and effect size were increased. However, the extent of this improvement depended on the magnitude of the neural activation effect. The smallest effect size (β = 0.009), which reflects the estimate obtained from the original model and therefore represents the most realistic value for the present study, produced relatively low power. Power was 53% at *N* = 30 and 66% at *N* = 46, indicating that the original sample was likely underpowered to detect such a small effect reliably. Power exceeded 90% only when sample sizes reached 80 or more, suggesting that larger samples are required for stable detection of this weak neural-behavioural association. This pattern reflects the experimental context: although neural activation associated with sleep duration appears to influence threat decisions, the effect is subtle and therefore difficult to detect without either larger samples or highly precise neural measures. 
+
+When effect size was increased to a moderate level (β = 0.015), which may reflect stronger neural-behavioural coupling or reduced measurement noise, power increased dramatically. Power reached 87% at *N* = 30 and 100% by *N* = 46, indicating that the modelling framework is capable of detecting an effect of this magnitude within the existing sample size. This suggests the modest power observed in the realistic scenario is not due to limitations of the GLMM but rather to the small underlying effect.
+
+At the largest simulated effect size (β = 0.025), power reached 100% across all sample sizes. This demonstrates that the model and simulation structure are highly sensitive to strong neural predictors of threat decisions, further emphasising that the reduced power observed at smaller sample sizes is attributable to the the subtlety of the neural activation effect rather than analytic inefficiency. 
+
+Overall, these findings are consistent with broader work in developmental affective neuroscience, where brain-behaviour associations are typically small and require large samples for reliable estimation, particularly in adolescents who exhibit significant variability in both sleep patterns and threat-processing neural circuitry. The sensitivity analysis therefore highlights a key methodological challenge for the original study: the duration-related neural activation effect is likely weak, meaning that studies with modest sample sizes (such as *N* = 46) may detect the effect only inconsistently.
+
+## 10. Final reflections
+
+Overall, this simulation project was both challenging and rewarding, and it extended my understanding of mixed-effects modelling beyond the practical exercises. Going from reconstructing the original analysis to designing and running a sensitivity analysis made the methodological decisions feel much more consequential than they often appear on paper.  
+
+One challenge I faced was visualising the relationship between neural activation and threat decisions. I attempted to recreate the original paper’s Figure 5 using overlaid histograms, but persistent issues with mismatched scaling between the probability and frequency axes meant that the figure was misleading rather than informative. After several iterations, I opted instead for jittered points, which, while less visually rich, avoided misrepresenting the underlying distribution. This compromise made me more aware of how visualisation choices can influence the clarity and reliability of reported results, and that sometimes a simpler plot is the more honest one. 
+
+The power and sensitivity analyses highlighted how underpowered the original study likely was. My simulation estimated only 63% power to detect the reported effect which raises concerns about the reproducibility of the original findings and highlighted how seemingly small brain-behaviour effects require much larger samples than are typically collected. Exploring different combinations of sample and effect sizes showed how fragile the detectability of the effect was. Ultimately, this project changed how much confidence I place in significant p-values on their own. Conducting the power analysis provided a more transparent view of the underlying evidence and highlighted the importance of incorporating power and sensitivity considerations into interpretation. 
+
+Finally, the methodological omissions in the original paper—such as the unexplained trial exclusions and lack of effect size reporting—forced me to make several assumptions. For example, I simulated the full number of potential trials (3220 rather than the 3010 actually analysed), which may have affected the reliability of my findings. By treating all trials as valid, I likely modelled a dataset with more information and less noise than the original researchers had. The ~200 excluded trials were unlikely to be random and may have reflected accuracy failures, missing responses, or scanner-related artefacts. As a result, my simulated dataset no longer mirrored the structure or quality of the empirical data.
+
+This choice also risked inflating the apparent precision of the parameter estimates. With 3220 simulated trials, the model appears more stable and “clean” than the real analysis, potentially overestimating power and underestimating variance. In turn, this may give an overly optimistic sense of how detectable the effect actually was. This assumption improved convenience but reduced its fidelity, weakening the robustness of the power calculations.
+
+Overall, this highlighted how incomplete reporting in published studies directly undermines reproducibility and introduces uncertainty into any simulation that attempts to recreate the original analysis. 
+
+## References
+Adolphs, R., Tranel, D., & Damasio, A. R. (1998). The human amygdala in social judgment. Nature, 393(6684), 470–474. https://doi.org/10.1038/30982
+
+Bar, M., Neta, M., & Linz, H. (2006). Very first impressions. Emotion, 6(2), 269–278. https://doi.org/10.1037/1528-3542.6.2.269
+
+Beebe, D. W., DiFrancesco, M. W., Tlustos, S. J., McNally, K. A., & Holland, S. K. (2009). Preliminary fMRI findings in experimentally sleep-restricted adolescents engaged in a working memory task. Behavioral and Brain Functions, 5(1), 9. https://doi.org/10.1186/1744-9081-5-9
+
+Goldstein-Piekarski, A. N., Greer, S. M., Saletin, J. M., & Walker, M. P. (2015). Sleep deprivation impairs the human central and peripheral nervous system Discrimination of social threat. Journal of Neuroscience, 35(28), 10135–10145. https://doi.org/10.1523/jneurosci.5254-14.2015
+
+Gujar, N., Yoo, S., Hu, P., & Walker, M. P. (2011). Sleep deprivation amplifies reactivity of brain reward networks, biasing the appraisal of positive emotional experiences. Journal of Neuroscience, 31(12), 4466–4474. https://doi.org/10.1523/jneurosci.3220-10.2011
+
+Killgore, W. D., Balkin, T. J., Yarnell, A. M., & Capaldi, V. F. (2017). Sleep deprivation impairs recognition of specific emotions. Neurobiology of Sleep and Circadian Rhythms, 3, 10–16. https://doi.org/10.1016/j.nbscr.2017.01.001
+
+Kong, D., Soon, C. S., Chee, M. W., Kong, D., Soon, C. S., & Chee, M. W. (2010). Reduced visual processing capacity in sleep deprived persons. NeuroImage, 55(2), 629–634. https://doi.org/10.1016/j.neuroimage.2010.12.057
+
+Lim, J., & Dinges, D. F. (2008). Sleep deprivation and vigilant attention. Annals of the New York Academy of Sciences, 1129(1), 305–322. https://doi.org/10.1196/annals.1417.002
+
+Ohayon, M. M., Roberts, R. E., Zulley, J., Smirne, S., & Priest, R. G. (2000). Prevalence and patterns of problematic sleep among older adolescents. Journal of the American Academy of Child & Adolescent Psychiatry, 39(12), 1549–1556. https://doi.org/10.1097/00004583-200012000-00019
+
+Poldrack, R. A., Baker, C. I., Durnez, J., Gorgolewski, K. J., Matthews, P. M., Munafò, M. R., Nichols, T. E., Poline, J., Vul, E., & Yarkoni, T. (2017). Scanning the horizon: towards transparent and reproducible neuroimaging research. Nature Reviews. Neuroscience, 18(2), 115–126. https://doi.org/10.1038/nrn.2016.167
+
+Soffer-Dudek, N., Sadeh, A., Dahl, R. E., & Rosenblat-Stein, S. (2011). Poor Sleep Quality Predicts Deficient Emotion Information Processing over Time in Early Adolescence. SLEEP, 34(11), 1499–1508. https://doi.org/10.5665/sleep.1386
+
+Talbot, L. S., McGlinchey, E. L., Kaplan, K. A., Dahl, R. E., & Harvey, A. G. (2010). Sleep deprivation in adolescents and adults: Changes in affect. Emotion, 10(6), 831–841. https://doi.org/10.1037/a0020138
+
+Tashjian, S. M., & Galván, A. (2019). Neural recruitment related to threat perception differs as a function of adolescent sleep. Developmental Science, 23(5), Article 12933. https://doi.org/10.1111/desc.12933
